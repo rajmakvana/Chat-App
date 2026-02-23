@@ -11,11 +11,13 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.0",
     "@types/socket.io": "^3.0.2",
+    "bcrypt": "^6.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },

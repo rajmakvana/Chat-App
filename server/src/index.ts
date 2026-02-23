@@ -3,6 +3,8 @@ import cors from "cors";
 import { Server } from "socket.io";
 import http from "http";
 import dotenv from "dotenv";
+import { connectToDb } from "./config/db";
+import userAuthRouter from "./routes/user.route";
 
 const app = express();
 dotenv.config();
@@ -12,6 +14,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const server = http.createServer(app);
+
+// connect to Database
+connectToDb();
+
+app.use("/api/auth" , userAuthRouter)
 
 server.listen(process.env.PORT, () => {
   console.log(`Server is running on port ${process.env.PORT}`);
