@@ -1,0 +1,17 @@
+User connects
+   ↓
+JWT verified
+   ↓
+Store in onlineUsers Map
+   ↓
+User sends message
+   ↓
+Save to DB
+   ↓
+Find receiver socket
+   ↓
+Send instantly
+   ↓
+User disconnect
+   ↓
+Remove from map
