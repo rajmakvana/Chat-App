@@ -5,6 +5,7 @@ import http from "http";
 import dotenv from "dotenv";
 import { connectToDb } from "./config/db";
 import userAuthRouter from "./routes/user.route";
+import chatRouter from "./routes/chat.route";
 
 const app = express();
 dotenv.config();
@@ -18,7 +19,8 @@ const server = http.createServer(app);
 // connect to Database
 connectToDb();
 
-app.use("/api/auth" , userAuthRouter)
+app.use("/api/auth" , userAuthRouter);
+app.use("/api/chat" , chatRouter);
 
 server.listen(process.env.PORT, () => {
   console.log(`Server is running on port ${process.env.PORT}`);
