@@ -1,4 +1,4 @@
-import React, { use, useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import type { AllUser } from "../pages/Chat";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
@@ -11,6 +11,7 @@ interface Message {
   sender: AllUser;
   receiver: AllUser;
   message: string;
+  status: "sent" | "delivered" | "seen";
   createdAt?: string;
   updatedAt?: string;
 }
@@ -27,6 +28,13 @@ const ChatSection: React.FC = () => {
   const navigate = useNavigate();
 
   const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    if (!selectedUser) return;
+    socket.emit("mark_seen", {
+      senderId: selectedUser._id,
+    });
+  }, [selectedUser]);
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -50,6 +58,22 @@ const ChatSection: React.FC = () => {
       setMessages((prev) => [...prev, newMessage]);
     });
 
+    socket.on("message_delivered", ({ messageId }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId ? { ...msg, status: "delivered" } : msg,
+        ),
+      );
+    });
+
+    socket.on("messages_seen", ({ seenBy }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.receiver._id === seenBy ? { ...msg, status: "seen" } : msg,
+        ),
+      );
+    });
+
     socket.on("typing", ({ senderId }) => {
       console.log("typing from:", senderId);
 
@@ -68,6 +92,7 @@ const ChatSection: React.FC = () => {
       socket.off("receive_message");
       socket.off("typing");
       socket.off("stop_typing");
+      socket.off("messages_seen");
     };
   }, [userId]);
 
@@ -85,7 +110,6 @@ const ChatSection: React.FC = () => {
       console.log(error);
     }
   };
-
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -158,6 +182,11 @@ const ChatSection: React.FC = () => {
                   minute: "2-digit",
                 })}
               </span>
+              {msg.sender._id === currentUserId && (
+                <span>
+                  {msg.status}
+                </span>
+              )}
             </div>
           ))
         )}

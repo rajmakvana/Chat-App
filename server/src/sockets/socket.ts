@@ -21,7 +21,9 @@ export const initializeSocket = (server: any) => {
 
   io.use(async (socket: AuthSocket, next) => {
     try {
-      const token = await socket.handshake.auth?.token || socket.handshake.headers.token as string;
+      const token =
+        (await socket.handshake.auth?.token) ||
+        (socket.handshake.headers.token as string);
       if (!token) {
         return next(new Error("Unauthorized"));
       }
@@ -35,10 +37,36 @@ export const initializeSocket = (server: any) => {
     }
   });
 
-  io.on("connection", (socket: AuthSocket) => {
+  io.on("connection", async (socket: AuthSocket) => {
     const userId = socket.userId!;
     console.log("User Connected 🚀", userId);
     onlineUsers.set(userId, socket.id);
+
+    const undeliveredMessages = await Chat.find({
+      receiver: userId,
+      status: "sent",
+    });
+
+    await Chat.updateMany(
+      {
+        receiverId: userId,
+        status: "sent",
+      },
+      {
+        status: "delivered",
+      },
+    );
+
+    undeliveredMessages.forEach((msg) => {
+      const senderSocketId = onlineUsers.get(msg.sender._id.toString());
+
+      if (senderSocketId) {
+        console.log("update delivered for message:", msg._id);
+        io.to(senderSocketId).emit("message_delivered", {
+          messageId: msg._id,
+        });
+      }
+    });
 
     io.emit("online_users", Array.from(onlineUsers.keys()));
 
@@ -51,18 +79,27 @@ export const initializeSocket = (server: any) => {
           sender: senderId,
           receiver: receiverId,
           message,
+          status: "sent",
         });
+
+        const receiverSocketId = onlineUsers.get(receiverId);
+
+        if (receiverSocketId) {
+          newMessage.status = "delivered";
+          await newMessage.save();
+        }
 
         const populatedMessage = await newMessage.populate(
           "sender receiver",
           "name email",
         );
 
-        // send to receiver
-        const receiverSocketId = onlineUsers.get(receiverId);
-
         if (receiverSocketId) {
           io.to(receiverSocketId).emit("receive_message", populatedMessage);
+
+          socket.emit("message_delivered", {
+            messageId: newMessage._id,
+          });
         }
         // send back to sender
         socket.emit("receive_message", populatedMessage);
@@ -87,6 +124,27 @@ export const initializeSocket = (server: any) => {
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("stop_typing", {
           senderId: userId,
+        });
+      }
+    });
+
+    socket.on("mark_seen", async ({ senderId }) => {
+      await Chat.updateMany(
+        {
+          sender: senderId,
+          receiver: socket.userId,
+          status: { $ne: "seen" },
+        },
+        {
+          status: "seen",
+        },
+      );
+
+      const senderSocketId = onlineUsers.get(senderId);
+
+      if (senderSocketId) {
+        io.to(senderSocketId).emit("messages_seen", {
+          seenBy: socket.userId,
         });
       }
     });
