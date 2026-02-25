@@ -11,7 +11,12 @@ import { initializeSocket } from "./sockets/socket";
 const app = express();
 dotenv.config();
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173", // your frontend URL
+  credentials: true,
+  exposedHeaders: ["x-authorized"] // 👈 REQUIRED
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

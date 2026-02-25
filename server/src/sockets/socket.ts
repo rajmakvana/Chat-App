@@ -19,10 +19,9 @@ export const initializeSocket = (server: any) => {
     },
   });
 
-  io.use((socket: AuthSocket, next) => {
+  io.use(async (socket: AuthSocket, next) => {
     try {
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.token;
-
+      const token = await socket.handshake.auth?.token || socket.handshake.headers.token as string;
       if (!token) {
         return next(new Error("Unauthorized"));
       }
@@ -72,11 +71,30 @@ export const initializeSocket = (server: any) => {
       }
     });
 
+    socket.on("typing", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing", {
+          senderId: userId,
+        });
+      }
+    });
+
+    socket.on("stop_typing", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("stop_typing", {
+          senderId: userId,
+        });
+      }
+    });
+
     socket.on("disconnect", () => {
       console.log("User disconnected:", userId);
       onlineUsers.delete(userId);
       io.emit("online_users", Array.from(onlineUsers.keys()));
     });
-
   });
 };

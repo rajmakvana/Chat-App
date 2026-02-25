@@ -1,4 +1,5 @@
 import { User } from "../models/user.model";
+import { io } from "../sockets/socket";
 import { generateToken } from "../utils/jwt";
 import bcrypt from "bcrypt";
 import { Request, Response } from "express";
@@ -40,8 +41,10 @@ export const signup = async (req: Request, res: Response) => {
 
     // generate token
     const token = generateToken({ _id: user._id.toString() });
-    
-    res.set('x-authorized' , token)
+
+    res.set("x-authorized", token);
+
+    io.emit("new_user", user);
 
     res.status(201).json({
       message: "Signup successful",
@@ -50,7 +53,7 @@ export const signup = async (req: Request, res: Response) => {
         userName: user.name,
         userEmail: user.email,
       },
-      token
+      token,
     });
   } catch (error) {
     console.log(error);
@@ -86,9 +89,9 @@ export const signin = async (req: Request, res: Response) => {
       });
     }
 
-    const token = generateToken({ _id : user._id.toString()});
+    const token = generateToken({ _id: user._id.toString() });
 
-    res.set('x-authorized' , token)
+    res.set("x-authorized", token);
 
     res.status(200).json({
       message: "Signin successful",
@@ -97,7 +100,7 @@ export const signin = async (req: Request, res: Response) => {
         userName: user.name,
         userEmail: user.email,
       },
-      token
+      token,
     });
   } catch (error) {
     res.status(500).json({
