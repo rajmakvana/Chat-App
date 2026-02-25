@@ -2,6 +2,7 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import Chat from "../models/chat.model";
 import { verifyToken } from "../utils/jwt";
+import { GroupMessage } from "../models/group.model";
 
 interface AuthSocket extends Socket {
   userId?: string;
@@ -147,6 +148,23 @@ export const initializeSocket = (server: any) => {
           seenBy: socket.userId,
         });
       }
+    });
+
+    socket.on("join_group", ({ groupId }) => {
+      socket.join(groupId);
+      console.log(`${socket.userId} joined group ${groupId}`);
+    });
+
+    socket.on("send_group_message", async ({ groupId, message }) => {
+      const senderId = socket.userId;
+
+      const newMessage = await GroupMessage.create({
+        groupId : groupId,
+        message : message,
+        sender : senderId
+      });
+      
+      io.to(groupId).emit("receive_group_message", newMessage);
     });
 
     socket.on("disconnect", () => {
