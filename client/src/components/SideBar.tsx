@@ -2,13 +2,15 @@ import React from "react";
 import type { AllUser } from "../pages/Chat";
 import { useNavigate } from "react-router-dom";
 import SelectedUserContext from "../context/SelectedUser";
+import { CiUnread } from "react-icons/ci";
 
 interface SidebarProps {
   allUsers: AllUser[];
   onlineUsers: string[];
+  handleUnread : (e: React.MouseEvent<SVGElement>, id : string) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ allUsers, onlineUsers }) => {
+const Sidebar: React.FC<SidebarProps> = ({ allUsers, onlineUsers , handleUnread  }) => {
   const navigate = useNavigate();
 
   const { setSelectedUser } = React.useContext(SelectedUserContext)!;
@@ -43,6 +45,14 @@ const Sidebar: React.FC<SidebarProps> = ({ allUsers, onlineUsers }) => {
                 `}
               >
                 <span>{user.name}</span>
+                
+                {user.unreadCount > 0 && (
+                  <span className="ml-2 bg-red-500 text-xs rounded-full px-2 py-0.5">
+                    {user.unreadCount} {user.lastMessage ? `: ${user.lastMessage.message}` : ""}
+                  </span>
+                )}
+
+                <CiUnread onClick={(e) => handleUnread(e, user._id)} />
 
                 <span className="text-sm">
                   {isOnline ? "🟢 Online" : "⚫ Offline"}

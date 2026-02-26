@@ -50,7 +50,7 @@ export const initializeSocket = (server: any) => {
 
     await Chat.updateMany(
       {
-        receiverId: userId,
+        receiver: userId,
         status: "sent",
       },
       {
@@ -62,7 +62,6 @@ export const initializeSocket = (server: any) => {
       const senderSocketId = onlineUsers.get(msg.sender._id.toString());
 
       if (senderSocketId) {
-        console.log("update delivered for message:", msg._id);
         io.to(senderSocketId).emit("message_delivered", {
           messageId: msg._id,
         });
@@ -86,7 +85,7 @@ export const initializeSocket = (server: any) => {
         const receiverSocketId = onlineUsers.get(receiverId);
 
         if (receiverSocketId) {
-          newMessage.status = "delivered";
+          newMessage.status = "delivered"
           await newMessage.save();
         }
 
@@ -138,6 +137,7 @@ export const initializeSocket = (server: any) => {
         },
         {
           status: "seen",
+          read : true
         },
       );
 
@@ -159,12 +159,21 @@ export const initializeSocket = (server: any) => {
       const senderId = socket.userId;
 
       const newMessage = await GroupMessage.create({
-        groupId : groupId,
-        message : message,
-        sender : senderId
+        groupId: groupId,
+        message: message,
+        sender: senderId,
       });
-      
+
       io.to(groupId).emit("receive_group_message", newMessage);
+    });
+
+    socket.on("get_lastMessage", async ({ receiverId }) => {
+      const lastMessage = await Chat.findOneAndUpdate({
+        sender: receiverId,
+        receiver: userId,
+      },{read : false}).sort({ createdAt: -1 });
+      socket.emit("receive_lastMessage" , lastMessage);
+
     });
 
     socket.on("disconnect", () => {

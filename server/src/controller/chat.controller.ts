@@ -3,21 +3,65 @@ import { User } from "../models/user.model";
 import { Request } from "../types/request.type";
 import Chat from "../models/chat.model";
 
+
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const curentUserId = req.authUser?._id;
-    const users = await User.find({ _id: { $ne: curentUserId } }).select(
-      "-password -createdAt -updatedAt",
+
+    const currentUserId = req.authUser?._id;
+
+    const users = await User.find({
+      _id: { $ne: currentUserId }
+    }).select("-password -createdAt -updatedAt");
+
+
+    const usersWithUnreadCount = await Promise.all(
+
+      users.map(async (user) => {
+
+        // unread messages count
+        const unreadCount = await Chat.countDocuments({
+          sender: user._id,
+          receiver: currentUserId,
+          status: "delivered"
+        });
+
+
+        // last message
+        const lastMessage = await Chat.findOne({
+          $or: [
+            { sender: currentUserId, receiver: user._id },
+            { sender: user._id, receiver: currentUserId }
+          ]
+        })
+        .sort({ createdAt: -1 })
+        .select("message");
+
+
+        return {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          unreadCount,
+          lastMessage
+        };
+
+      })
+
     );
+
+
     res.status(200).json({
       success: true,
-      users,
+      users: usersWithUnreadCount
     });
+
   } catch (error) {
+
     res.status(500).json({
-        success : false,
-      message: "Failed to fetch users",
+      success: false,
+      message: "Failed to fetch users"
     });
+
   }
 };
 
@@ -46,4 +90,71 @@ export const getMessages = async (req: Request, res: Response) => {
       message: "Failed to fetch messages"
     });
   }
+};
+
+
+
+export const getChatList = async (req : Request, res : Response) => {
+
+  const userId = req.authUser?._id;
+
+  const chats = await Chat.aggregate([
+
+    {
+      $match: {
+        $or: [
+          { sender: userId },
+          { receiver: userId }
+        ]
+      }
+    },
+
+    {
+      $sort: { createdAt: -1 }
+    },
+
+    {
+      $group: {
+
+        _id: {
+          $cond: [
+            { $eq: ["$sender", userId] },
+            "$receiver",
+            "$sender"
+          ]
+        },
+
+        lastMessage: { $first: "$message" },
+
+        status: { $first: "$status" },
+
+        createdAt: { $first: "$createdAt" },
+
+        unreadCount: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ["$receiver", userId] },
+                  { $ne: ["$status", "seen"] }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        }
+
+      }
+
+    }
+
+  ]);
+
+  const populatedChats = await User.populate(chats, {
+    path: "_id",
+    select: "name email"
+  });
+
+  res.json(populatedChats);
 };

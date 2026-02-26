@@ -4,11 +4,17 @@ import { socket } from "../services/socket";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../components/SideBar";
 import AuthContext from "../context/AuthContext";
+import SelectedUserContext from "../context/SelectedUser";
 
 export interface AllUser {
   _id: string;
   name: string;
   email: string;
+  unreadCount: number;
+  lastMessage: {
+    _id: string;
+    message: string;
+  };
 }
 
 const Chat: React.FC = () => {
@@ -16,24 +22,68 @@ const Chat: React.FC = () => {
   const [onlineUsers, setOnlineUsers] = React.useState<string[]>([]);
 
   const { user } = useContext(AuthContext)!;
+  const { selectedUser } = useContext(SelectedUserContext)!;
+
+  useEffect(() => {
+    socket.on("receive_lastMessage", (data) => {
+      console.log("data first", data);
+      setAllUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user._id === data.sender
+            ? {
+                ...user,
+                lastMessage: {
+                  message: data.message,
+                  _id: data._id,
+                },
+                unreadCount: 1,
+              }
+            : user,
+        ),
+      );
+    });
+  }, []);
 
   // fetch users
   useEffect(() => {
     const fetchAllUsers = async () => {
       try {
         const response = await api.get("/chat/users");
-        setAllUsers(response.data.users);
+        const fetchedUsers = response.data.users;
+
+        setAllUsers((prevUsers) => {
+          // first load
+          if (prevUsers.length === 0) {
+            return fetchedUsers;
+          }
+
+          // update only matching users
+          return prevUsers.map((prevUser) => {
+            const updatedUser = fetchedUsers.find(
+              (user: AllUser) => user._id === prevUser._id,
+            );
+
+            if (updatedUser && prevUser._id === selectedUser?._id) {
+              return {
+                ...prevUser,
+                unreadCount: updatedUser.unreadCount,
+                lastMessage: updatedUser.lastMessage,
+              };
+            }
+            return prevUser;
+          });
+        });
       } catch (error) {
         console.log(error);
       }
     };
 
     fetchAllUsers();
-  }, []);
+  }, [selectedUser]);
 
+  console.log(allUsers)
   // socket connection
   useEffect(() => {
-
     if (!user) return;
 
     const authorizedToken = localStorage.getItem("token");
@@ -52,6 +102,20 @@ const Chat: React.FC = () => {
 
     socket.on("receive_message", (message) => {
       console.log("New message:", message);
+      setAllUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user._id === message.sender._id
+            ? {
+                ...user,
+                lastMessage: {
+                  message: message.message,
+                  _id: message._id,
+                },
+                unreadCount: user.unreadCount + 1,
+              }
+            : user,
+        ),
+      );
     });
 
     return () => {
@@ -61,9 +125,20 @@ const Chat: React.FC = () => {
     };
   }, [user]);
 
+  const handleUnread = (e: React.MouseEvent<SVGElement>, id: string) => {
+    e.stopPropagation();
+    socket.emit("get_lastMessage", {
+      receiverId: id,
+    });
+  };
+
   return (
     <div className="h-screen flex bg-gray-100">
-      <Sidebar allUsers={allUsers} onlineUsers={onlineUsers} />
+      <Sidebar
+        allUsers={allUsers}
+        onlineUsers={onlineUsers}
+        handleUnread={handleUnread}
+      />
       <Outlet />
     </div>
   );

@@ -25,11 +25,18 @@ const chatSchema = new Schema<IMessage>(
       enum: ["sent", "delivered", "seen"],
       default: "sent",
     },
+    read : {
+      type : Boolean,
+      default : false
+    }
   },
   {
     timestamps: true,
   },
 );
+
+chatSchema.index({ sender: 1, receiver: 1 });
+chatSchema.index({ receiver: 1, status: 1 });
 
 const Chat = mongoose.model<IMessage>("Chat", chatSchema);
 export default Chat;

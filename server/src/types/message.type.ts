@@ -7,4 +7,5 @@ export interface IMessage extends Document {
   status: "sent" | "delivered" | "seen";
   createdAt: Date;
   updatedAt: Date;
+  read : boolean
 }

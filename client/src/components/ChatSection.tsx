@@ -12,6 +12,7 @@ interface Message {
   receiver: AllUser;
   message: string;
   status: "sent" | "delivered" | "seen";
+  read : boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -41,7 +42,6 @@ const ChatSection: React.FC = () => {
       api
         .get(`/chat/messages/${userId}`)
         .then((response) => {
-          console.log(response.data);
           setMessages(response.data.messages);
         })
         .catch((error) => {
@@ -54,7 +54,6 @@ const ChatSection: React.FC = () => {
 
   useEffect(() => {
     socket.on("receive_message", (newMessage: Message) => {
-      console.log(newMessage);
       setMessages((prev) => [...prev, newMessage]);
     });
 
@@ -69,14 +68,12 @@ const ChatSection: React.FC = () => {
     socket.on("messages_seen", ({ seenBy }) => {
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.receiver._id === seenBy ? { ...msg, status: "seen" } : msg,
+          msg.receiver._id === seenBy ? { ...msg, status : "seen" , read : true } : msg,
         ),
       );
     });
 
     socket.on("typing", ({ senderId }) => {
-      console.log("typing from:", senderId);
-
       if (senderId === userId) {
         setIsTyping(true);
       }
@@ -98,7 +95,6 @@ const ChatSection: React.FC = () => {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log(input);
     if (!input.trim()) return;
     try {
       socket.emit("send_message", {
@@ -182,11 +178,7 @@ const ChatSection: React.FC = () => {
                   minute: "2-digit",
                 })}
               </span>
-              {msg.sender._id === currentUserId && (
-                <span>
-                  {msg.status}
-                </span>
-              )}
+              {msg.sender._id === currentUserId && <span>{msg.status}</span>}
             </div>
           ))
         )}
