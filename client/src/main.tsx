@@ -4,13 +4,16 @@ import App from "./App.tsx";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import { SelectedUserProvider } from "./context/SelectedUser.tsx";
+import { SelectedGroupProvider } from "./context/SelectedGroup.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
-  <AuthProvider>
-    <SelectedUserProvider>
-      <App />
-    </SelectedUserProvider>
-  </AuthProvider>
+    <AuthProvider>
+      <SelectedUserProvider>
+        <SelectedGroupProvider>
+          <App />
+        </SelectedGroupProvider>
+      </SelectedUserProvider>
+    </AuthProvider>
   </BrowserRouter>,
 );

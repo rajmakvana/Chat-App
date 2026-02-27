@@ -17,8 +17,21 @@ export interface AllUser {
   };
 }
 
+export interface User {
+  _id : string,
+  name : string,
+  email : string
+}
+
+export interface AllGroup {
+  _id : string
+  name : string,
+  members : User[]
+}
+
 const Chat: React.FC = () => {
   const [allUsers, setAllUsers] = React.useState<AllUser[]>([]);
+  const [allGroups , setAllGroups] = React.useState<AllGroup[]>([]);
   const [onlineUsers, setOnlineUsers] = React.useState<string[]>([]);
 
   const { user } = useContext(AuthContext)!;
@@ -78,10 +91,19 @@ const Chat: React.FC = () => {
       }
     };
 
+    const getAllGroups = async () => {
+      try {
+        const response =  await api.get("/group");
+        setAllGroups(response.data);
+      } catch (error) {
+        console.log(error)
+      }
+    }
+
+    getAllGroups();
     fetchAllUsers();
   }, [selectedUser]);
 
-  console.log(allUsers)
   // socket connection
   useEffect(() => {
     if (!user) return;
@@ -138,6 +160,8 @@ const Chat: React.FC = () => {
         allUsers={allUsers}
         onlineUsers={onlineUsers}
         handleUnread={handleUnread}
+        allGroups={allGroups}
+        setAllGroups={setAllGroups}
       />
       <Outlet />
     </div>

@@ -2,7 +2,9 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import Chat from "../models/chat.model";
 import { verifyToken } from "../utils/jwt";
-import { GroupMessage } from "../models/group.model";
+import { Group, GroupMessage } from "../models/group.model";
+import mongoose from "mongoose";
+import { User } from "../models/user.model";
 
 interface AuthSocket extends Socket {
   userId?: string;
@@ -85,7 +87,7 @@ export const initializeSocket = (server: any) => {
         const receiverSocketId = onlineUsers.get(receiverId);
 
         if (receiverSocketId) {
-          newMessage.status = "delivered"
+          newMessage.status = "delivered";
           await newMessage.save();
         }
 
@@ -137,7 +139,7 @@ export const initializeSocket = (server: any) => {
         },
         {
           status: "seen",
-          read : true
+          read: true,
         },
       );
 
@@ -150,9 +152,28 @@ export const initializeSocket = (server: any) => {
       }
     });
 
-    socket.on("join_group", ({ groupId }) => {
-      socket.join(groupId);
-      console.log(`${socket.userId} joined group ${groupId}`);
+    socket.on("join_group", async ({ groupId }) => {
+      try {
+        const group = await Group.findOne({
+          _id: new mongoose.Types.ObjectId(groupId),
+          members: socket.userId,
+        });
+
+        if (!group) {
+          return socket.emit("error", "Not authorized to join this group");
+        }
+
+        socket.join(groupId);
+
+        console.log(`User ${socket.userId} joined group ${groupId}`);
+      } catch (error) {
+        console.log(error);
+      }
+    });
+
+    socket.on("leave_group", ({ groupId }) => {
+      socket.leave(groupId);
+      console.log(`${socket.userId} left group ${groupId}`);
     });
 
     socket.on("send_group_message", async ({ groupId, message }) => {
@@ -164,16 +185,50 @@ export const initializeSocket = (server: any) => {
         sender: senderId,
       });
 
-      io.to(groupId).emit("receive_group_message", newMessage);
+      const populatedMessage = await newMessage.populate(
+        "sender",
+        "_id name email",
+      );
+
+      io.to(groupId).emit("receive_group_message", populatedMessage);
     });
 
-    socket.on("get_lastMessage", async ({ receiverId }) => {
-      const lastMessage = await Chat.findOneAndUpdate({
-        sender: receiverId,
-        receiver: userId,
-      },{read : false}).sort({ createdAt: -1 });
-      socket.emit("receive_lastMessage" , lastMessage);
+ socket.on("mark_group_seen", async ({ groupId }) => {
+  try {
 
+    await GroupMessage.updateMany(
+      {
+        groupId,
+        seenBy: { $ne: socket.userId },
+      },
+      {
+        $addToSet: { seenBy: socket.userId },
+      }
+    );
+
+    const user = await User.findById(socket.userId)
+      .select("_id name")
+      .lean();
+
+    io.to(groupId).emit("group_seen_update", {
+      groupId,
+      user,
+    });
+
+  } catch (error) {
+    console.log(error);
+  }
+});
+
+    socket.on("get_lastMessage", async ({ receiverId }) => {
+      const lastMessage = await Chat.findOneAndUpdate(
+        {
+          sender: receiverId,
+          receiver: userId,
+        },
+        { read: false },
+      ).sort({ createdAt: -1 });
+      socket.emit("receive_lastMessage", lastMessage);
     });
 
     socket.on("disconnect", () => {
