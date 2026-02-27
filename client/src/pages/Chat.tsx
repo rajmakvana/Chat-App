@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import api from "../services/api";
 import { socket } from "../services/socket";
 import { Outlet } from "react-router-dom";
@@ -6,164 +6,243 @@ import Sidebar from "../components/SideBar";
 import AuthContext from "../context/AuthContext";
 import SelectedUserContext from "../context/SelectedUser";
 
+/** ===============================
+ * INTERFACES
+ =============================== */
+
 export interface AllUser {
   _id: string;
   name: string;
   email: string;
   unreadCount: number;
-  lastMessage: {
+  lastMessage?: {
     _id: string;
     message: string;
   };
 }
 
 export interface User {
-  _id : string,
-  name : string,
-  email : string
+  _id: string;
+  name: string;
+  email: string;
 }
 
 export interface AllGroup {
-  _id : string
-  name : string,
-  members : User[]
+  _id: string;
+  name: string;
+  members: User[];
 }
 
+/** ===============================
+ * MAIN COMPONENT
+ =============================== */
+
 const Chat: React.FC = () => {
-  const [allUsers, setAllUsers] = React.useState<AllUser[]>([]);
-  const [allGroups , setAllGroups] = React.useState<AllGroup[]>([]);
-  const [onlineUsers, setOnlineUsers] = React.useState<string[]>([]);
+  /** ===============================
+   * STATE
+   =============================== */
+
+  const [allUsers, setAllUsers] = useState<AllUser[]>([]);
+  const [allGroups, setAllGroups] = useState<AllGroup[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   const { user } = useContext(AuthContext)!;
   const { selectedUser } = useContext(SelectedUserContext)!;
 
+  /** ===============================
+   * INITIAL DATA FETCH
+   =============================== */
+
   useEffect(() => {
-    socket.on("receive_lastMessage", (data) => {
-      console.log("data first", data);
-      setAllUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user._id === data.sender
-            ? {
-                ...user,
-                lastMessage: {
-                  message: data.message,
-                  _id: data._id,
-                },
-                unreadCount: 1,
-              }
-            : user,
-        ),
-      );
-    });
+    fetchUsers();
+    fetchGroups();
   }, []);
 
-  // fetch users
-  useEffect(() => {
-    const fetchAllUsers = async () => {
-      try {
-        const response = await api.get("/chat/users");
-        const fetchedUsers = response.data.users;
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get("/chat/users");
 
-        setAllUsers((prevUsers) => {
-          // first load
-          if (prevUsers.length === 0) {
-            return fetchedUsers;
-          }
-
-          // update only matching users
-          return prevUsers.map((prevUser) => {
-            const updatedUser = fetchedUsers.find(
-              (user: AllUser) => user._id === prevUser._id,
-            );
-
-            if (updatedUser && prevUser._id === selectedUser?._id) {
-              return {
-                ...prevUser,
-                unreadCount: updatedUser.unreadCount,
-                lastMessage: updatedUser.lastMessage,
-              };
-            }
-            return prevUser;
-          });
-        });
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    const getAllGroups = async () => {
-      try {
-        const response =  await api.get("/group");
-        setAllGroups(response.data);
-      } catch (error) {
-        console.log(error)
-      }
+      setAllUsers(res.data.users);
+    } catch (error) {
+      console.log(error);
     }
+  };
 
-    getAllGroups();
-    fetchAllUsers();
-  }, [selectedUser]);
+  const fetchGroups = async () => {
+    try {
+      const res = await api.get("/group");
 
-  // socket connection
+      setAllGroups(res.data);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  /** ===============================
+   * SOCKET CONNECTION
+   =============================== */
+
   useEffect(() => {
     if (!user) return;
 
-    const authorizedToken = localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
-    if (authorizedToken) {
-      socket.auth = {
-        token: authorizedToken,
-      };
-      socket.connect();
-    }
+    if (!token) return;
 
-    socket.off("online_users");
-    socket.on("online_users", (data: string[]) => {
-      setOnlineUsers(() => [...data]);
+    socket.auth = { token };
+
+    socket.connect();
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
+
+  /** ===============================
+   * ONLINE USERS LISTENER
+   =============================== */
+
+  useEffect(() => {
+    socket.on("online_users", (users: string[]) => {
+      setOnlineUsers(users);
     });
 
+    return () => {
+      socket.off("online_users");
+    };
+  }, []);
+
+  /** ===============================
+   * RECEIVE PRIVATE MESSAGE
+   * Handles:
+   * - last message update
+   * - unread count
+   =============================== */
+
+  useEffect(() => {
     socket.on("receive_message", (message) => {
-      console.log("New message:", message);
       setAllUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user._id === message.sender._id
+        prevUsers.map((u) => {
+          // if message belongs to this user
+          if (u._id === message.sender._id) {
+            const isOpen = selectedUser?._id === message.sender._id;
+
+            return {
+              ...u,
+
+              lastMessage: {
+                _id: message._id,
+                message: message.message,
+              },
+
+              unreadCount: isOpen ? 0 : u.unreadCount + 1,
+            };
+          }
+
+          return u;
+        }),
+      );
+    });
+
+    return () => {
+      socket.off("receive_message");
+    };
+  }, [selectedUser]);
+
+  /** ===============================
+   * MESSAGE SEEN EVENT FROM SERVER
+   * reset unread when backend confirms seen
+   =============================== */
+
+  useEffect(() => {
+    socket.on("messages_seen", ({ seenBy }) => {
+      setAllUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u._id === seenBy
             ? {
-                ...user,
-                lastMessage: {
-                  message: message.message,
-                  _id: message._id,
-                },
-                unreadCount: user.unreadCount + 1,
+                ...u,
+                unreadCount: 0,
               }
-            : user,
+            : u,
         ),
       );
     });
 
     return () => {
-      socket.off("online_users");
-      socket.off("receive_message");
-      socket.disconnect();
+      socket.off("messages_seen");
     };
-  }, [user]);
+  }, []);
 
-  const handleUnread = (e: React.MouseEvent<SVGElement>, id: string) => {
+  /** ===============================
+   * RESET UNREAD WHEN CHAT OPENED
+   =============================== */
+
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    // reset UI instantly
+    setAllUsers((prevUsers) =>
+      prevUsers.map((u) =>
+        u._id === selectedUser._id
+          ? {
+              ...u,
+              unreadCount: 0,
+            }
+          : u,
+      ),
+    );
+
+    // notify backend
+    socket.emit("mark_seen", {
+      senderId: selectedUser._id,
+    });
+  }, [selectedUser]);
+
+  /** ===============================
+   * MANUAL UNREAD RESET (ICON CLICK)
+   =============================== */
+
+  const handleUnread = (
+    e: React.MouseEvent,
+    userId: string
+  ) => {
     e.stopPropagation();
-    socket.emit("get_lastMessage", {
-      receiverId: id,
+
+    // reset UI immediately
+    setAllUsers((prevUsers) =>
+      prevUsers.map((u) =>
+        u._id === userId
+          ? {
+              ...u,
+              unreadCount: 0,
+            }
+          : u,
+      ),
+    );
+
+    // notify backend
+    socket.emit("mark_seen", {
+      senderId: userId,
     });
   };
 
+  /** ===============================
+   * RENDER
+   =============================== */
+
   return (
     <div className="h-screen flex bg-gray-100">
+
       <Sidebar
         allUsers={allUsers}
+        allGroups={allGroups}
         onlineUsers={onlineUsers}
         handleUnread={handleUnread}
-        allGroups={allGroups}
         setAllGroups={setAllGroups}
       />
+
       <Outlet />
+
     </div>
   );
 };

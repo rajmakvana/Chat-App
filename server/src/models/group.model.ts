@@ -12,6 +12,7 @@ export interface IGroupMessage {
   status: "sent" | "delivered" | "seen";
   createdAt: Date;
   updatedAt: Date;
+  replyTo?: mongoose.Types.ObjectId;
   read: boolean;
   seenBy : mongoose.Types.ObjectId[]
 }
@@ -52,6 +53,11 @@ const GroupMessageSchema: Schema<IGroupMessage> = new Schema(
       type: String,
       enum: ["sent", "delivered", "seen"],
       default: "sent",
+    },
+    replyTo: {
+      type: Schema.Types.ObjectId,
+      ref: "GroupMessage",
+      default: null,
     },
     read: {
       type: Boolean,

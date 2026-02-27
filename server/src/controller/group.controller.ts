@@ -53,7 +53,7 @@ export const getGroupMessage = async (req: Request, res: Response) => {
 
   try {
     const messages = await GroupMessage.find({ groupId })
-      .populate("sender", "name email").populate("seenBy", "name")
+      .populate("sender", "name email").populate("seenBy", "name").populate("replyTo")
       .sort({ createdAt: 1 });
     res.status(201).json(messages);
   } catch (error) {

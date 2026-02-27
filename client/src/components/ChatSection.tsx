@@ -6,6 +6,9 @@ import SelectedUserContext from "../context/SelectedUser";
 import SelectedGroupContext from "../context/SelectedGroup";
 import AuthContext from "../context/AuthContext";
 import { socket } from "../services/socket";
+import { FaReply } from "react-icons/fa";
+import { IoCloseSharp } from "react-icons/io5";
+import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 
 interface SeenUser {
   _id: string;
@@ -20,6 +23,11 @@ interface Message {
   message: string;
   status: "sent" | "delivered" | "seen";
   read: boolean;
+  replyTo?: {
+    _id: string;
+    message: string;
+    sender: AllUser;
+  };
   seenBy?: SeenUser[];
   createdAt?: string;
 }
@@ -38,11 +46,22 @@ const ChatSection: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [replyMessage, setReplyMessage] = useState<Message | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const isGroupChat = !!selectedGroup && selectedGroup._id === userId;
   const isPrivateChat = !!selectedUser && selectedUser._id === userId;
+
+  // Add Emoji Picker
+
+  const [showPicker, setShowPicker] = useState<boolean>(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+   const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setInput((prev) => prev + emojiData.emoji);
+    inputRef.current?.focus();
+  };
 
   /*
   ============================
@@ -52,6 +71,8 @@ const ChatSection: React.FC = () => {
 
   useEffect(() => {
     if (!userId) return;
+
+    setMessages([]);
 
     const fetchPrivateMessages = async () => {
       try {
@@ -216,15 +237,18 @@ const ChatSection: React.FC = () => {
       socket.emit("send_group_message", {
         groupId: userId,
         message: input,
+        replyTo: replyMessage?._id || null,
       });
     } else if (isPrivateChat) {
       socket.emit("send_message", {
         receiverId: userId,
         message: input,
+        replyTo: replyMessage?._id || null,
       });
     }
 
     setInput("");
+    setReplyMessage(null);
   };
 
   /*
@@ -313,7 +337,23 @@ const ChatSection: React.FC = () => {
               msg.sender._id === currentUserId ? "items-end" : "items-start"
             }`}
           >
-            <div className="bg-white px-3 py-2 rounded">{msg.message}</div>
+            {msg.replyTo && (
+              <div className="bg-gray-200 px-2 py-1 rounded text-xs">
+                <b>{msg.replyTo.sender.name}</b>
+                <p>{msg.replyTo.message}</p>
+              </div>
+            )}
+
+            <div className="bg-white px-3 py-2 rounded flex gap-2">
+              <p>{msg.message}</p>
+
+              <button
+                onClick={() => setReplyMessage(msg)}
+                className="text-gray-400 hover:text-blue-500 text-xs"
+              >
+                <FaReply />
+              </button>
+            </div>
 
             <span className="text-xs text-gray-400 mt-1">
               {msg.createdAt &&
@@ -351,15 +391,52 @@ const ChatSection: React.FC = () => {
 
       {/* INPUT */}
 
-      <form onSubmit={sendMessage} className="p-3 bg-white flex gap-2">
-        <input
-          value={input}
-          onChange={handleTyping}
-          className="flex-1 border px-3 py-2 rounded"
-          placeholder="Type message..."
-        />
+      <form onSubmit={sendMessage} className="p-3 bg-white flex flex-col gap-2">
+        {replyMessage && (
+          <div className="bg-gray-100 p-2 rounded flex justify-between items-center mb-2">
+            <div>
+              <p className="text-xs text-gray-500">
+                Replying to {replyMessage.sender.name}
+              </p>
 
-        <button className="bg-blue-500 text-white px-4 rounded">Send</button>
+              <p className="text-sm truncate max-w-xs">
+                {replyMessage.message}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setReplyMessage(null)}
+              className="text-red-500 text-xs"
+            >
+              <IoCloseSharp size={"24px"} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <input
+            value={input}
+            onChange={handleTyping}
+            className="flex-1 border px-3 py-2 rounded"
+            placeholder="Type message..."
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowPicker(!showPicker)}
+            className="text-xl"
+          >
+            😊
+          </button>
+
+          {showPicker && (
+            <div className="absolute bottom-15 right-0 z-50">
+              <EmojiPicker onEmojiClick={handleEmojiClick} />
+            </div>
+          )}
+
+          <button className="bg-blue-500 text-white px-4 rounded">Send</button>
+        </div>
       </form>
     </div>
   );

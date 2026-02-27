@@ -25,6 +25,11 @@ const chatSchema = new Schema<IMessage>(
       enum: ["sent", "delivered", "seen"],
       default: "sent",
     },
+     replyTo: {
+      type: Schema.Types.ObjectId,
+      ref: "Chat",
+      default: null,
+    },
     read : {
       type : Boolean,
       default : false

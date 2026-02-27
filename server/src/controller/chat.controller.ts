@@ -78,7 +78,8 @@ export const getMessages = async (req: Request, res: Response) => {
     })
       .sort({ createdAt: 1 })
       .populate("sender", "name email")
-      .populate("receiver", "name email");
+      .populate("receiver", "name email")
+      .populate("replyTo")
 
     res.status(200).json({
       success: true,

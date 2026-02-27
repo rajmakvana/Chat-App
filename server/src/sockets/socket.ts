@@ -1,9 +1,8 @@
 import { Server, Socket } from "socket.io";
-import jwt from "jsonwebtoken";
-import Chat from "../models/chat.model";
-import { verifyToken } from "../utils/jwt";
-import { Group, GroupMessage } from "../models/group.model";
 import mongoose from "mongoose";
+import Chat from "../models/chat.model";
+import { Group, GroupMessage } from "../models/group.model";
+import { verifyToken } from "../utils/jwt";
 import { User } from "../models/user.model";
 
 interface AuthSocket extends Socket {
@@ -15,6 +14,7 @@ const onlineUsers = new Map<string, string>();
 export let io: Server;
 
 export const initializeSocket = (server: any) => {
+
   io = new Server(server, {
     cors: {
       origin: "http://localhost:5173",
@@ -22,11 +22,19 @@ export const initializeSocket = (server: any) => {
     },
   });
 
-  io.use(async (socket: AuthSocket, next) => {
+  /**
+   * ============================
+   * AUTH
+   * ============================
+   */
+  io.use((socket: AuthSocket, next) => {
+
     try {
+
       const token =
-        (await socket.handshake.auth?.token) ||
+        socket.handshake.auth?.token ||
         (socket.handshake.headers.token as string);
+
       if (!token) {
         return next(new Error("Unauthorized"));
       }
@@ -34,17 +42,37 @@ export const initializeSocket = (server: any) => {
       const decoded: any = verifyToken(token);
 
       socket.userId = decoded._id;
+
       next();
-    } catch (error) {
+
+    } catch {
       next(new Error("Unauthorized"));
     }
+
   });
 
+  /**
+   * ============================
+   * CONNECTION
+   * ============================
+   */
   io.on("connection", async (socket: AuthSocket) => {
+
     const userId = socket.userId!;
-    console.log("User Connected 🚀", userId);
+
+    console.log("User Connected:", userId);
+
     onlineUsers.set(userId, socket.id);
 
+    io.emit("online_users", Array.from(onlineUsers.keys()));
+
+
+
+    /**
+     * ============================
+     * FIX 1: DELIVER UNDELIVERED MESSAGES
+     * ============================
+     */
     const undeliveredMessages = await Chat.find({
       receiver: userId,
       status: "sent",
@@ -61,180 +89,343 @@ export const initializeSocket = (server: any) => {
     );
 
     undeliveredMessages.forEach((msg) => {
-      const senderSocketId = onlineUsers.get(msg.sender._id.toString());
+
+      const senderSocketId =
+        onlineUsers.get(msg.sender.toString());
 
       if (senderSocketId) {
+
         io.to(senderSocketId).emit("message_delivered", {
           messageId: msg._id,
         });
+
       }
+
     });
 
-    io.emit("online_users", Array.from(onlineUsers.keys()));
 
+
+    /**
+     * ============================
+     * PRIVATE MESSAGE
+     * ============================
+     */
     socket.on("send_message", async (data) => {
+
       try {
-        const { receiverId, message } = data;
-        const senderId = socket.userId!;
+
+        const { receiverId, message, replyTo } = data;
+
+        const senderId = userId;
 
         const newMessage = await Chat.create({
           sender: senderId,
           receiver: receiverId,
           message,
+          replyTo: replyTo || null,
           status: "sent",
+          read: false,
         });
 
-        const receiverSocketId = onlineUsers.get(receiverId);
 
+        const receiverSocketId =
+          onlineUsers.get(receiverId);
+
+
+
+        /**
+         * update delivered
+         */
         if (receiverSocketId) {
+
           newMessage.status = "delivered";
+
           await newMessage.save();
+
         }
 
-        const populatedMessage = await newMessage.populate(
-          "sender receiver",
-          "name email",
-        );
 
+
+        /**
+         * populate
+         */
+        const populatedMessage =
+          await Chat.findById(newMessage._id)
+            .populate("sender", "name email")
+            .populate("receiver", "name email")
+            .populate({
+              path: "replyTo",
+              select: "message sender",
+              populate: {
+                path: "sender",
+                select: "name",
+              },
+            });
+
+
+
+        /**
+         * send to receiver
+         */
         if (receiverSocketId) {
-          io.to(receiverSocketId).emit("receive_message", populatedMessage);
+
+          io.to(receiverSocketId)
+            .emit("receive_message", populatedMessage);
+
+
+          io.to(receiverSocketId)
+            .emit("receive_lastMessage", populatedMessage);
+
 
           socket.emit("message_delivered", {
             messageId: newMessage._id,
           });
+
         }
-        // send back to sender
+
+
+
+        /**
+         * send to sender
+         */
         socket.emit("receive_message", populatedMessage);
-      } catch (error) {
-        console.log("Message error:", error);
+
       }
+      catch (error) {
+
+        console.log("send_message error:", error);
+
+      }
+
     });
 
+
+
+    /**
+     * ============================
+     * FIX 2: MARK SEEN
+     * ============================
+     */
+    socket.on("mark_seen", async ({ senderId }) => {
+
+      try {
+
+        await Chat.updateMany(
+          {
+            sender: senderId,
+            receiver: userId,
+            status: { $ne: "seen" },
+          },
+          {
+            status: "seen",
+            read: true,
+          },
+        );
+
+
+        const senderSocketId =
+          onlineUsers.get(senderId);
+
+
+
+        /**
+         * notify sender
+         */
+        if (senderSocketId) {
+
+          io.to(senderSocketId)
+            .emit("messages_seen", {
+              seenBy: userId,
+            });
+
+        }
+
+
+
+        /**
+         * notify receiver (reset unread)
+         */
+        socket.emit("unread_reset", {
+          userId: senderId,
+        });
+
+      }
+      catch (error) {
+
+        console.log("mark_seen error:", error);
+
+      }
+
+    });
+
+
+
+    /**
+     * ============================
+     * TYPING
+     * ============================
+     */
     socket.on("typing", ({ receiverId }) => {
-      const receiverSocketId = onlineUsers.get(receiverId);
+
+      const receiverSocketId =
+        onlineUsers.get(receiverId);
 
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("typing", {
-          senderId: userId,
-        });
+
+        io.to(receiverSocketId)
+          .emit("typing", {
+            senderId: userId,
+          });
+
       }
+
     });
+
 
     socket.on("stop_typing", ({ receiverId }) => {
-      const receiverSocketId = onlineUsers.get(receiverId);
+
+      const receiverSocketId =
+        onlineUsers.get(receiverId);
 
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("stop_typing", {
-          senderId: userId,
-        });
+
+        io.to(receiverSocketId)
+          .emit("stop_typing", {
+            senderId: userId,
+          });
+
       }
+
     });
 
-    socket.on("mark_seen", async ({ senderId }) => {
-      await Chat.updateMany(
-        {
-          sender: senderId,
-          receiver: socket.userId,
-          status: { $ne: "seen" },
-        },
-        {
-          status: "seen",
-          read: true,
-        },
-      );
 
-      const senderSocketId = onlineUsers.get(senderId);
 
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messages_seen", {
-          seenBy: socket.userId,
-        });
-      }
-    });
-
+    /**
+     * ============================
+     * GROUP JOIN
+     * ============================
+     */
     socket.on("join_group", async ({ groupId }) => {
-      try {
-        const group = await Group.findOne({
-          _id: new mongoose.Types.ObjectId(groupId),
-          members: socket.userId,
-        });
 
-        if (!group) {
-          return socket.emit("error", "Not authorized to join this group");
-        }
-
-        socket.join(groupId);
-
-        console.log(`User ${socket.userId} joined group ${groupId}`);
-      } catch (error) {
-        console.log(error);
-      }
-    });
-
-    socket.on("leave_group", ({ groupId }) => {
-      socket.leave(groupId);
-      console.log(`${socket.userId} left group ${groupId}`);
-    });
-
-    socket.on("send_group_message", async ({ groupId, message }) => {
-      const senderId = socket.userId;
-
-      const newMessage = await GroupMessage.create({
-        groupId: groupId,
-        message: message,
-        sender: senderId,
+      const group = await Group.findOne({
+        _id: new mongoose.Types.ObjectId(groupId),
+        members: userId,
       });
 
-      const populatedMessage = await newMessage.populate(
-        "sender",
-        "_id name email",
+      if (!group) return;
+
+      socket.join(groupId);
+
+    });
+
+
+
+    /**
+     * ============================
+     * GROUP MESSAGE
+     * ============================
+     */
+    socket.on("send_group_message", async (data) => {
+
+      try {
+
+        const { groupId, message, replyTo } = data;
+
+        const newMessage =
+          await GroupMessage.create({
+
+            groupId,
+
+            sender: userId,
+
+            message,
+
+            replyTo: replyTo || null,
+
+            seenBy: [userId],
+
+          });
+
+
+
+        const populatedMessage =
+          await GroupMessage.findById(newMessage._id)
+            .populate("sender", "name email")
+            .populate({
+              path: "replyTo",
+              select: "message sender",
+              populate: {
+                path: "sender",
+                select: "name",
+              },
+            });
+
+
+
+        io.to(groupId)
+          .emit("receive_group_message", populatedMessage);
+
+      }
+      catch (error) {
+
+        console.log(error);
+
+      }
+
+    });
+
+
+
+    /**
+     * ============================
+     * GROUP SEEN
+     * ============================
+     */
+    socket.on("mark_group_seen", async ({ groupId }) => {
+
+      await GroupMessage.updateMany(
+        {
+          groupId,
+          seenBy: { $ne: userId },
+        },
+        {
+          $addToSet: { seenBy: userId },
+        },
       );
 
-      io.to(groupId).emit("receive_group_message", populatedMessage);
+
+      const user =
+        await User.findById(userId)
+          .select("_id name")
+          .lean();
+
+
+      io.to(groupId)
+        .emit("group_seen_update", {
+          groupId,
+          user,
+        });
+
     });
 
- socket.on("mark_group_seen", async ({ groupId }) => {
-  try {
 
-    await GroupMessage.updateMany(
-      {
-        groupId,
-        seenBy: { $ne: socket.userId },
-      },
-      {
-        $addToSet: { seenBy: socket.userId },
-      }
-    );
 
-    const user = await User.findById(socket.userId)
-      .select("_id name")
-      .lean();
-
-    io.to(groupId).emit("group_seen_update", {
-      groupId,
-      user,
-    });
-
-  } catch (error) {
-    console.log(error);
-  }
-});
-
-    socket.on("get_lastMessage", async ({ receiverId }) => {
-      const lastMessage = await Chat.findOneAndUpdate(
-        {
-          sender: receiverId,
-          receiver: userId,
-        },
-        { read: false },
-      ).sort({ createdAt: -1 });
-      socket.emit("receive_lastMessage", lastMessage);
-    });
-
+    /**
+     * ============================
+     * DISCONNECT
+     * ============================
+     */
     socket.on("disconnect", () => {
-      console.log("User disconnected:", userId);
+
       onlineUsers.delete(userId);
-      io.emit("online_users", Array.from(onlineUsers.keys()));
+
+      io.emit("online_users",
+        Array.from(onlineUsers.keys()));
+
+      console.log("Disconnected:", userId);
+
     });
+
   });
+
 };
