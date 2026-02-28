@@ -32,7 +32,10 @@ export interface AllGroup {
   _id: string;
   name: string;
   members: User[];
-  groupImage : string;
+  groupImage: string;
+  pinnedBy: string[];
+  createdAt? : Date | undefined;
+  updatedAt? : Date | undefined;
 }
 
 /** ===============================
@@ -112,22 +115,40 @@ const Chat: React.FC = () => {
     const handleProfileChange = (data: any) => {
       setAllUsers((prev) =>
         prev.map((user) =>
-          user._id === data.user._id ? {...user , profileImage : data.user.profileImage} : user
-        )
+          user._id === data.user._id
+            ? { ...user, profileImage: data.user.profileImage }
+            : user,
+        ),
       );
     };
 
-    const handleGroupChange = (data : any) => {
-      setAllGroups((prev) => prev.map((group) => group._id === data.group._id ? data.group : group));
-    }
+    const handleGroupChange = (data: any) => {
+      setAllGroups((prev) =>
+        prev.map((group) =>
+          group._id === data.group._id ? data.group : group,
+        ),
+      );
+    };
+
+    const handlePinUpdate = (data: any) => {
+      setAllGroups((prevGroups) =>
+        prevGroups.map((group) =>
+          group._id === data.groupId
+            ? { ...group, pinnedBy: data.pinnedBy }
+            : group,
+        ),
+      );
+    };
+
+    socket.on("group_pin_updated", handlePinUpdate);
 
     socket.on("profile_change", handleProfileChange);
     socket.on("group_profile_change", handleGroupChange);
 
-
     return () => {
       socket.off("online_users");
       socket.off("profile_change", handleProfileChange);
+      socket.off("group_pin_updated", handlePinUpdate);
     };
   }, []);
 

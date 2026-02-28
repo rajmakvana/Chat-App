@@ -109,13 +109,38 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
       });
 
-      const updatedGroup = res.data.group
-      setAllGroups((prev) => prev.map((group) => group._id === updatedGroup._id ? updatedGroup : group));
+      const updatedGroup = res.data.group;
+      setAllGroups((prev) =>
+        prev.map((group) =>
+          group._id === updatedGroup._id ? updatedGroup : group,
+        ),
+      );
       console.log(res.data.group);
     } catch (error) {
       console.log(error);
     }
   };
+
+  const togglePinGroup = async (groupId: string) => {
+    try {
+      await api.patch(`/group/${groupId}/pin`);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const sortedGroups = [...allGroups].sort((a, b) => {
+    const aPinned = a.pinnedBy.includes(user?.userId || "");
+    const bPinned = b.pinnedBy.includes(user?.userId || "");
+
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+
+    return (
+      new Date(b.updatedAt || 0).getTime() -
+      new Date(a.updatedAt || 0).getTime()
+    );
+  });
 
   return (
     <div className="w-80 bg-gray-800 text-white h-screen">
@@ -203,7 +228,10 @@ const Sidebar: React.FC<SidebarProps> = ({
         <h2 className="text-2xl mt-3">All Groups </h2>
 
         <ul className="space-y-2 mt-3">
-          {allGroups.map((groups) => {
+          {sortedGroups.map((groups) => {
+
+            const isPinned = groups.pinnedBy.includes(user?.userId || "");
+
             return (
               <li
                 key={groups._id}
@@ -222,7 +250,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onClick={handleGroupImageClick}
                   />
 
-                  <span>{groups?.name}</span>
+                  <div>
+                    <h3>{groups.name}</h3>
+                  </div>
+
+                  <button
+                    onClick={() => togglePinGroup(groups._id)}
+                    className={`px-3 py-1 rounded text-white ${
+                      isPinned ? "bg-red-500" : "bg-blue-500"
+                    }`}
+                  >
+                    {isPinned ? "Unpin" : "Pin"}
+                  </button>
 
                   {/* hidden input */}
                   <input

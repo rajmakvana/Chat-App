@@ -102,3 +102,45 @@ export const uploadGroupImage = async (req: Request, res: Response) => {
     });
   }
 };
+
+
+export const togglePinGroup = async (req: Request, res: Response) => {
+  try {
+    const userId = req.authUser?._id;
+    const { groupId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const group = await Group.findById(groupId);
+
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    const isPinned = group.pinnedBy?.includes(userId);
+
+    if (isPinned) {
+      group.pinnedBy = group.pinnedBy?.filter(
+        (id) => id.toString() !== userId.toString()
+      );
+    } else {
+      group.pinnedBy?.push(userId);
+    }
+
+    await group.save();
+
+    io.emit("group_pin_updated", {
+      groupId,
+      pinnedBy: group.pinnedBy,
+    });
+
+    res.json({
+      message: isPinned ? "Group unpinned" : "Group pinned",
+      group,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};

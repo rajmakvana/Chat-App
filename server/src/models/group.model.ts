@@ -4,6 +4,9 @@ export interface IGroup extends Document {
   name: string;
   members: mongoose.Types.ObjectId[];
   groupImage?: string;
+  pinnedBy?: mongoose.Types.ObjectId[];
+  createdAt : Date;
+  updatedAt : Date;
 }
 
 export interface IGroupMessage {
@@ -33,7 +36,13 @@ const GroupSchema: Schema<IGroup> = new Schema({
     type: String,
     default: "",
   },
-});
+  pinnedBy: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  ],
+},{timestamps : true});
 
 export const Group = mongoose.model<IGroup>("Group", GroupSchema);
 
