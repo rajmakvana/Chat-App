@@ -26,7 +26,7 @@ const server = http.createServer(app);
 
 // connect to Database
 connectToDb();
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+app.use("/uploads", express.static("uploads"));
 app.use("/api/auth" , userAuthRouter);
 app.use("/api/chat" , chatRouter);
 app.use("/api/group" , GroupMessage);

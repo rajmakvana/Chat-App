@@ -9,13 +9,14 @@ import { socket } from "../services/socket";
 import { FaReply } from "react-icons/fa";
 import { IoCloseSharp } from "react-icons/io5";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
+import FileMessage from "./FileMessage";
 
 interface SeenUser {
   _id: string;
   name: string;
 }
 
-interface Message {
+export interface Message {
   _id?: string;
   groupId?: string;
   sender: AllUser;
@@ -28,6 +29,11 @@ interface Message {
     message: string;
     sender: AllUser;
   };
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  messageType?: "text" | "file";
   seenBy?: SeenUser[];
   createdAt?: string;
 }
@@ -58,7 +64,7 @@ const ChatSection: React.FC = () => {
   const [showPicker, setShowPicker] = useState<boolean>(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-   const handleEmojiClick = (emojiData: EmojiClickData) => {
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
     setInput((prev) => prev + emojiData.emoji);
     inputRef.current?.focus();
   };
@@ -251,11 +257,7 @@ const ChatSection: React.FC = () => {
     setReplyMessage(null);
   };
 
-  /*
-  ============================
-  TYPING
-  ============================
-  */
+  // Typing event
 
   let typingTimeout: any;
 
@@ -273,40 +275,55 @@ const ChatSection: React.FC = () => {
     }, 1000);
   };
 
-  /*
-  ============================
-  AUTO SCROLL
-  ============================
-  */
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages]);
 
-  /*
-  ============================
-  LOGOUT
-  ============================
-  */
-
   const handleLogout = () => {
     logout();
     navigate("/");
   };
-
-  /*
-  ============================
-  UI
-  ============================
-  */
 
   const chatName = isPrivateChat
     ? selectedUser?.name
     : isGroupChat
       ? selectedGroup?.name
       : "";
+
+  // share files..
+
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedUser) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("receiverId", selectedUser._id);
+
+    try {
+      await api.post("/chat/send-file", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  useEffect(() => {
+    socket.on("receive_new_message", (message: Message) => {
+      console.log("evet receive...", message);
+      setMessages((prev) => [...prev, message]);
+    });
+    return () => {
+      socket.off("receive_new_message");
+    };
+  }, []);
 
   return (
     <div className="bg-gray-600 h-full w-full flex flex-col">
@@ -354,6 +371,8 @@ const ChatSection: React.FC = () => {
                 <FaReply />
               </button>
             </div>
+
+            {msg.messageType === "file" && <FileMessage message={msg} />}
 
             <span className="text-xs text-gray-400 mt-1">
               {msg.createdAt &&
@@ -420,6 +439,10 @@ const ChatSection: React.FC = () => {
             className="flex-1 border px-3 py-2 rounded"
             placeholder="Type message..."
           />
+
+          <input type="file" ref={fileRef} hidden onChange={handleFileChange} />
+
+          <button onClick={() => fileRef.current?.click()}>📎 File</button>
 
           <button
             type="button"

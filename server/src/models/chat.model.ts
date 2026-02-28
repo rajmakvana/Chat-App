@@ -17,23 +17,34 @@ const chatSchema = new Schema<IMessage>(
     },
     message: {
       type: String,
-      required: true,
       trim: true,
+    },
+    fileUrl: {
+      type: String,
+      default: "",
+    },
+    fileName: String,
+    fileType: String,
+    fileSize: Number,
+    messageType: {
+      type: String,
+      enum: ["text", "file"],
+      default: "text",
     },
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],
       default: "sent",
     },
-     replyTo: {
+    replyTo: {
       type: Schema.Types.ObjectId,
       ref: "Chat",
       default: null,
     },
-    read : {
-      type : Boolean,
-      default : false
-    }
+    read: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

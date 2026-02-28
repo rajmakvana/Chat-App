@@ -9,7 +9,7 @@ interface AuthSocket extends Socket {
   userId?: string;
 }
 
-const onlineUsers = new Map<string, string>();
+export const onlineUsers = new Map<string, string>();
 
 export let io: Server;
 
