@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IGroup extends Document {
   name: string;
   members: mongoose.Types.ObjectId[];
+  groupImage?: string;
 }
 
 export interface IGroupMessage {
@@ -14,7 +15,7 @@ export interface IGroupMessage {
   updatedAt: Date;
   replyTo?: mongoose.Types.ObjectId;
   read: boolean;
-  seenBy : mongoose.Types.ObjectId[]
+  seenBy: mongoose.Types.ObjectId[];
 }
 
 const GroupSchema: Schema<IGroup> = new Schema({
@@ -28,6 +29,10 @@ const GroupSchema: Schema<IGroup> = new Schema({
       ref: "User",
     },
   ],
+  groupImage: {
+    type: String,
+    default: "",
+  },
 });
 
 export const Group = mongoose.model<IGroup>("Group", GroupSchema);
@@ -64,11 +69,11 @@ const GroupMessageSchema: Schema<IGroupMessage> = new Schema(
       default: false,
     },
     seenBy: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-  ],
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true },
 );

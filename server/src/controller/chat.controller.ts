@@ -41,6 +41,7 @@ export const getUsers = async (req: Request, res: Response) => {
           _id: user._id,
           name: user.name,
           email: user.email,
+          profileImage : user.profileImage,
           unreadCount,
           lastMessage
         };

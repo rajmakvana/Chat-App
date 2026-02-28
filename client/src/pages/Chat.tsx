@@ -14,6 +14,7 @@ export interface AllUser {
   _id: string;
   name: string;
   email: string;
+  profileImage: string;
   unreadCount: number;
   lastMessage?: {
     _id: string;
@@ -31,6 +32,7 @@ export interface AllGroup {
   _id: string;
   name: string;
   members: User[];
+  groupImage : string;
 }
 
 /** ===============================
@@ -107,8 +109,25 @@ const Chat: React.FC = () => {
       setOnlineUsers(users);
     });
 
+    const handleProfileChange = (data: any) => {
+      setAllUsers((prev) =>
+        prev.map((user) =>
+          user._id === data.user._id ? {...user , profileImage : data.user.profileImage} : user
+        )
+      );
+    };
+
+    const handleGroupChange = (data : any) => {
+      setAllGroups((prev) => prev.map((group) => group._id === data.group._id ? data.group : group));
+    }
+
+    socket.on("profile_change", handleProfileChange);
+    socket.on("group_profile_change", handleGroupChange);
+
+
     return () => {
       socket.off("online_users");
+      socket.off("profile_change", handleProfileChange);
     };
   }, []);
 
@@ -202,10 +221,7 @@ const Chat: React.FC = () => {
    * MANUAL UNREAD RESET (ICON CLICK)
    =============================== */
 
-  const handleUnread = (
-    e: React.MouseEvent,
-    userId: string
-  ) => {
+  const handleUnread = (e: React.MouseEvent, userId: string) => {
     e.stopPropagation();
 
     // reset UI immediately
@@ -232,7 +248,6 @@ const Chat: React.FC = () => {
 
   return (
     <div className="h-screen flex bg-gray-100">
-
       <Sidebar
         allUsers={allUsers}
         allGroups={allGroups}
@@ -242,7 +257,6 @@ const Chat: React.FC = () => {
       />
 
       <Outlet />
-
     </div>
   );
 };

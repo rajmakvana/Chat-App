@@ -8,6 +8,7 @@ import userAuthRouter from "./routes/user.route";
 import chatRouter from "./routes/chat.route";
 import { initializeSocket } from "./sockets/socket";
 import GroupMessage from "./routes/group.route";
+import path from "path";
 
 const app = express();
 dotenv.config();
@@ -25,7 +26,7 @@ const server = http.createServer(app);
 
 // connect to Database
 connectToDb();
-
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use("/api/auth" , userAuthRouter);
 app.use("/api/chat" , chatRouter);
 app.use("/api/group" , GroupMessage);

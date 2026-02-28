@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "../types/request.type";
 import { Group, GroupMessage } from "../models/group.model";
+import { io } from "../sockets/socket";
 
 export const createGroup = async (req: Request, res: Response) => {
   const { groupName, members } = req.body;
@@ -58,5 +59,46 @@ export const getGroupMessage = async (req: Request, res: Response) => {
     res.status(201).json(messages);
   } catch (error) {
     res.status(500).json({ error: "Failed to create group" });
+  }
+};
+
+export const uploadGroupImage = async (req: Request, res: Response) => {
+  try {
+    const {groupId} = req.params;
+    console.log(groupId);
+
+    if (!req.file) {
+      return res.status(400).json({
+        message: "No file uploaded",
+      });
+    }
+
+    const imagePath = `/uploads/profiles/${req.file.filename}`;
+
+    const group = await Group.findByIdAndUpdate(
+      groupId,
+      {
+        groupImage: imagePath,
+      },
+      { new: true },
+    );
+
+    if (!group) {
+      return res.status(400).json({
+        message: "User not found",
+      });
+    }
+
+    io.emit("group_profile_change" , {group});
+
+    res.status(200).json({
+      message: "Profile image uploaded",
+      group
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Upload failed",
+      error,
+    });
   }
 };

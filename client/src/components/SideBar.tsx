@@ -1,4 +1,10 @@
-import React, { useContext, useState, type Dispatch, type SetStateAction } from "react";
+import React, {
+  useContext,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { AllGroup, AllUser } from "../pages/Chat";
 import { useNavigate } from "react-router-dom";
 import SelectedUserContext from "../context/SelectedUser";
@@ -12,8 +18,8 @@ interface SidebarProps {
   allUsers: AllUser[];
   onlineUsers: string[];
   handleUnread: (e: React.MouseEvent<SVGElement>, id: string) => void;
-  allGroups : AllGroup[];
-  setAllGroups : Dispatch<SetStateAction<AllGroup[]>>;
+  allGroups: AllGroup[];
+  setAllGroups: Dispatch<SetStateAction<AllGroup[]>>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -28,28 +34,84 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { setSelectedUser } = React.useContext(SelectedUserContext)!;
   const { setSelectedGroup } = React.useContext(SelectedGroupContext)!;
 
-  const handleUserClick = (user: AllUser ) => {
+  const handleUserClick = (user: AllUser) => {
     setSelectedUser(user);
     navigate(`/chat/${user._id}`);
   };
 
-  const handleGroupClick = (group : AllGroup) => {
+  const handleGroupClick = (group: AllGroup) => {
     setSelectedGroup(group);
     navigate(`/chat/${group._id}`);
-  }
+  };
 
-
-  const {user} =  useContext(AuthContext)!;
+  const { user, setUser } = useContext(AuthContext)!;
   const [isOpen, setIsOpen] = useState<boolean>(false);
 
   const handleCreateGroup = async (groupName: string, members: string[]) => {
     try {
       const response = await api.post("/group/create", {
         groupName: groupName,
-        members: [...members , user?.userId],
+        members: [...members, user?.userId],
       });
       // console.log(response.data);
-      setAllGroups((prev) => [...prev , response.data] );
+      setAllGroups((prev) => [...prev, response.data]);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // profile Image handling
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const groupFileRef = useRef<HTMLInputElement>(null);
+
+  const handleImageClick = () => {
+    fileRef.current?.click();
+  };
+  const handleGroupImageClick = () => {
+    groupFileRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("profileImage", file);
+
+    try {
+      const res = await api.post("/auth/profile", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      setUser(res.data.user);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleGroupFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    groupId: string,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("profileImage", file);
+
+    try {
+      const res = await api.post(`/group/groupImage/${groupId}`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const updatedGroup = res.data.group
+      setAllGroups((prev) => prev.map((group) => group._id === updatedGroup._id ? updatedGroup : group));
+      console.log(res.data.group);
     } catch (error) {
       console.log(error);
     }
@@ -59,6 +121,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     <div className="w-80 bg-gray-800 text-white h-screen">
       <div className="p-5 border-b border-gray-700">
         <h2 className="text-xl font-bold">Chat App</h2>
+
+        <div className="flex items-center gap-3 cursor-pointer">
+          <img
+            src={
+              user?.profileImage
+                ? `http://localhost:3000${user.profileImage}`
+                : `https://ui-avatars.com/api/?name=${user?.userName}`
+            }
+            alt="profile"
+            className="w-12 h-12 rounded-full mt-2"
+            onClick={handleImageClick}
+          />
+
+          <span>{user?.userName}</span>
+
+          {/* hidden input */}
+          <input
+            type="file"
+            ref={fileRef}
+            hidden
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+        </div>
       </div>
 
       <div className="p-4 flex flex-col justify-between">
@@ -71,28 +157,44 @@ const Sidebar: React.FC<SidebarProps> = ({
                 key={user._id}
                 onClick={() => handleUserClick(user)}
                 className={`
-                  p-3 rounded cursor-pointer flex justify-between items-center
-                  ${
-                    isOnline
-                      ? "bg-green-600 hover:bg-green-700"
-                      : "bg-gray-700 hover:bg-gray-600"
-                  }
-                `}
+            p-3 rounded cursor-pointer flex justify-between items-center
+            ${
+              isOnline
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-gray-700 hover:bg-gray-600"
+            }
+          `}
               >
-                <span>{user.name}</span>
+                {/* LEFT SECTION: Profile Image + Name */}
+                <div className="flex items-center gap-3">
+                  <img
+                    src={
+                      user?.profileImage
+                        ? `http://localhost:3000${user.profileImage}`
+                        : `https://ui-avatars.com/api/?name=${user?.name}`
+                    }
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full object-cover border border-gray-400"
+                  />
 
-                {user.unreadCount > 0 && (
-                  <span className="ml-2 bg-red-500 text-xs rounded-full px-2 py-0.5">
-                    {user.unreadCount}{" "}
-                    {user.lastMessage ? `: ${user.lastMessage.message}` : ""}
+                  <span>{user.name}</span>
+                </div>
+
+                {/* RIGHT SECTION */}
+                <div className="flex items-center gap-3">
+                  {user.unreadCount > 0 && (
+                    <span className="ml-2 bg-red-500 text-xs rounded-full px-2 py-0.5">
+                      {user.unreadCount}{" "}
+                      {user.lastMessage ? `: ${user.lastMessage.message}` : ""}
+                    </span>
+                  )}
+
+                  <CiUnread onClick={(e) => handleUnread(e, user._id)} />
+
+                  <span className="text-sm">
+                    {isOnline ? "🟢 Online" : "⚫ Offline"}
                   </span>
-                )}
-
-                <CiUnread onClick={(e) => handleUnread(e, user._id)} />
-
-                <span className="text-sm">
-                  {isOnline ? "🟢 Online" : "⚫ Offline"}
-                </span>
+                </div>
               </li>
             );
           })}
@@ -102,27 +204,37 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         <ul className="space-y-2 mt-3">
           {allGroups.map((groups) => {
-            // const isOnline = onlineUsers.includes(groups._id);
             return (
               <li
                 key={groups._id}
                 onClick={() => handleGroupClick(groups)}
                 className="p-3 rounded cursor-pointer flex justify-between items-center bg-gray-700 hover:bg-gray-600"
               >
-                <span>{groups.name}</span>
-{/* 
-                {allGroups.length > 0 && (
-                  <span className="ml-2 bg-red-500 text-xs rounded-full px-2 py-0.5">
-                    {user.unreadCount}{" "}
-                    {user.lastMessage ? `: ${user.lastMessage.message}` : ""}
-                  </span>
-                )} */}
+                <div className="flex items-center gap-3 cursor-pointer">
+                  <img
+                    src={
+                      groups?.groupImage
+                        ? `http://localhost:3000${groups?.groupImage}`
+                        : `https://ui-avatars.com/api/?name=${groups?.name}`
+                    }
+                    alt="profile"
+                    className="w-12 h-12 rounded-full mt-2"
+                    onClick={handleGroupImageClick}
+                  />
 
-                {/* <CiUnread onClick={(e) => handleUnread(e, user._id)} /> */}
+                  <span>{groups?.name}</span>
 
-                {/* <span className="text-sm">
-                  {isOnline ? "🟢 Online" : "⚫ Offline"}
-                </span> */}
+                  {/* hidden input */}
+                  <input
+                    type="file"
+                    ref={groupFileRef}
+                    hidden
+                    accept="image/*"
+                    onChange={(e) =>
+                      handleGroupFileChange(e, groups._id.toString())
+                    }
+                  />
+                </div>
               </li>
             );
           })}

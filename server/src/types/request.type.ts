@@ -6,4 +6,7 @@ import { IUser } from "./user.type";
 export interface Request extends ExpressRequest {
   authUser?: IUser;
   userId?: string;
+   files?:
+    | { [fieldname: string]: Express.Multer.File[] }
+    | Express.Multer.File[];
 }

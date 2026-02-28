@@ -4,6 +4,7 @@ export interface User {
     userId: string;
     userName: string;
     userEmail: string;
+    profileImage?: string;
 }
 
 export interface LoginCredential {
@@ -15,6 +16,7 @@ export interface AuthContextValue {
     user: User | null;
     authUser: (credential: LoginCredential) => Promise<void>;
     logout: () => void;
+    setUser : React.Dispatch<React.SetStateAction<User | null>>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -55,7 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const value: AuthContextValue = {
         user,
         authUser,
-        logout
+        logout,
+        setUser
     };
 
     return (
