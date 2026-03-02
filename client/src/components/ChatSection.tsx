@@ -10,6 +10,7 @@ import { FaReply } from "react-icons/fa";
 import { IoCloseSharp } from "react-icons/io5";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import FileMessage from "./FileMessage";
+import { PiPushPinBold, PiPushPinFill } from "react-icons/pi";
 
 interface SeenUser {
   _id: string;
@@ -29,6 +30,7 @@ export interface Message {
     message: string;
     sender: AllUser;
   };
+  isPinned?: boolean;
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
@@ -325,6 +327,47 @@ const ChatSection: React.FC = () => {
     };
   }, []);
 
+  // Handle pin unpin functionality
+
+  const [pinnedMessage, setPinnedMessage] = useState<Message[]>([]);
+
+  useEffect(() => {
+    socket.on("message_pin_updated", (updatedMessage: Message) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === updatedMessage._id ? updatedMessage : msg,
+        ),
+      );
+
+      setPinnedMessage((prev) => {
+        if (updatedMessage.isPinned) {
+          // add if not exists
+          if (prev.find((m) => m._id === updatedMessage._id)) return prev;
+          return [updatedMessage, ...prev];
+        } else {
+          // remove if unpinned
+          return prev.filter((m) => m._id !== updatedMessage._id);
+        }
+      });
+    });
+
+    return () => {
+      socket.off("message_pin_updated");
+    };
+  }, []);
+
+  const togglePin = (messageId: string) => {
+    socket.emit("toggle_pin_message", {
+      messageId,
+      receiverId: selectedUser?._id,
+    });
+  };
+
+  useEffect(() => {
+    const pinned = messages.filter((msg) => msg.isPinned);
+    setPinnedMessage(pinned);
+  }, [messages]);
+
   return (
     <div className="bg-gray-600 h-full w-full flex flex-col">
       {/* HEADER */}
@@ -347,6 +390,22 @@ const ChatSection: React.FC = () => {
       {/* MESSAGES */}
 
       <div className="flex-1 overflow-y-auto p-4">
+        {pinnedMessage.length > 0 && (
+          <div className="absolute bg-yellow-100 border-b z-10">
+            {pinnedMessage.map((msg) => (
+              <div key={msg._id} className="p-2 border-b flex gap-3 justify-between">
+                <span> {msg.message || msg.fileName}</span>
+
+                <button
+                  onClick={() => msg._id && togglePin(msg._id.toString())}
+                  className="text-sm text-red-500"
+                > 
+                  <PiPushPinFill />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {messages.map((msg) => (
           <div
             key={msg._id}
@@ -369,6 +428,10 @@ const ChatSection: React.FC = () => {
                 className="text-gray-400 hover:text-blue-500 text-xs"
               >
                 <FaReply />
+              </button>
+
+              <button onClick={() => msg._id && togglePin(msg._id.toString())}>
+                {msg.isPinned ? <PiPushPinFill />: <PiPushPinBold /> }
               </button>
             </div>
 

@@ -9,6 +9,7 @@ export interface IMessage extends Document {
   fileType?: string;
   fileSize?: number;
   messageType?: "text" | "file";
+  isPinned?: boolean;
   status: "sent" | "delivered" | "seen";
   replyTo?: mongoose.Types.ObjectId;
   createdAt: Date;

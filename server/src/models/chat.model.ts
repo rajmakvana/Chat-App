@@ -31,6 +31,10 @@ const chatSchema = new Schema<IMessage>(
       enum: ["text", "file"],
       default: "text",
     },
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],
