@@ -1,12 +1,17 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Document, ObjectId, Schema } from "mongoose";
+
+interface PinnedUser {
+  userId: mongoose.Types.ObjectId;
+  pinnedAt: Date;
+}
 
 export interface IGroup extends Document {
   name: string;
   members: mongoose.Types.ObjectId[];
   groupImage?: string;
-  pinnedBy?: mongoose.Types.ObjectId[];
-  createdAt : Date;
-  updatedAt : Date;
+  pinnedBy?: PinnedUser[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface IGroupMessage {
@@ -21,28 +26,37 @@ export interface IGroupMessage {
   seenBy: mongoose.Types.ObjectId[];
 }
 
-const GroupSchema: Schema<IGroup> = new Schema({
-  name: {
-    type: String,
-    required: true,
-  },
-  members: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+const GroupSchema: Schema<IGroup> = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
     },
-  ],
-  groupImage: {
-    type: String,
-    default: "",
-  },
-  pinnedBy: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    groupImage: {
+      type: String,
+      default: "",
     },
-  ],
-},{timestamps : true});
+    pinnedBy: [
+      {
+        userId: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+        },
+        pinnedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+  },
+  { timestamps: true },
+);
 
 export const Group = mongoose.model<IGroup>("Group", GroupSchema);
 

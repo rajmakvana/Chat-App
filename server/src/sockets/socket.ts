@@ -302,8 +302,7 @@ export const initializeSocket = (server: any) => {
       });
     });
 
-    // pin / unpin handle
-
+    // pin / unpin handle in chat message
     socket.on("toggle_pin_message", async (data) => {
       try {
         const { messageId, receiverId } = data;
@@ -317,11 +316,11 @@ export const initializeSocket = (server: any) => {
 
         const populatedMessage = await message.populate([
           { path: "receiver", select: "name _id" },
-          { path: "replyTo"},
-          { path: "sender", select: "name _id"},
+          { path: "replyTo" },
+          { path: "sender", select: "name _id" },
         ]);
 
-        console.log(populatedMessage)
+        console.log(populatedMessage);
         // send to sender
         socket.emit("message_pin_updated", populatedMessage);
 
@@ -335,6 +334,79 @@ export const initializeSocket = (server: any) => {
       }
     });
 
+    // pin user
+
+    socket.on("toggle_user_pin", async ({ targetUserId }) => {
+      try {
+        const currentUserId = socket.userId;
+
+        if (!currentUserId) return;
+        const currentUser = await User.findById(currentUserId);
+        if (!currentUser) return;
+        const isPinned = currentUser.pinnedUsers.some(
+          (id) => id.toString() === targetUserId,
+        );
+        if (isPinned) {
+          currentUser.pinnedUsers = currentUser.pinnedUsers.filter(
+            (id) => id.toString() !== targetUserId,
+          );
+        } else {
+          currentUser.pinnedUsers.push(targetUserId);
+        }
+
+        await currentUser.save();
+
+        // Send updated pinned list to current user
+        io.to(socket.id).emit("user_pin_updated", {
+          pinnedUsers: currentUser.pinnedUsers,
+        });
+      } catch (error) {
+        console.log("Pin error:", error);
+      }
+    });
+
+    socket.on("toggle_pin_group", async ({ groupId }) => {
+      try {
+        const currentUserId = socket.userId;
+
+        if (!currentUserId) return;
+
+        const group = await Group.findById(groupId);
+
+        if (!group) return;
+
+        // ensure array exists
+        if (!group.pinnedBy) {
+          group.pinnedBy = [];
+        }
+
+        // SAFE check
+        const existingPinIndex = group.pinnedBy.findIndex(
+          (p) => p?.userId && p.userId.toString() === currentUserId.toString(),
+        );
+
+        if (existingPinIndex !== -1) {
+          // UNPIN
+          group.pinnedBy.splice(existingPinIndex, 1);
+        } else {
+          // PIN
+          group.pinnedBy.push({
+            userId: new mongoose.Types.ObjectId(currentUserId),
+            pinnedAt: new Date(),
+          });
+        }
+
+        await group.save();
+
+        // send updated group to ALL group members
+        io.emit("group_pin_updated", {
+          groupId: group._id,
+          pinnedBy: group.pinnedBy,
+        });
+      } catch (error) {
+        console.log("toggle_pin_group error:", error);
+      }
+    });
     /**
      * ============================
      * DISCONNECT

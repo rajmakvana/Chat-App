@@ -38,6 +38,7 @@ export const getUsers = async (req: Request, res: Response) => {
           profileImage: user.profileImage,
           unreadCount,
           lastMessage,
+          pinnedUsers: user?.pinnedUsers || [],
         };
       }),
     );

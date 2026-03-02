@@ -15,6 +15,7 @@ export interface AllUser {
   name: string;
   email: string;
   profileImage: string;
+  pinned?: boolean;
   unreadCount: number;
   lastMessage?: {
     _id: string;
@@ -28,14 +29,19 @@ export interface User {
   email: string;
 }
 
+interface PinnedUser {
+  userId: string;
+  pinnedAt: Date;
+}
+
 export interface AllGroup {
   _id: string;
   name: string;
   members: User[];
   groupImage: string;
-  pinnedBy: string[];
-  createdAt? : Date | undefined;
-  updatedAt? : Date | undefined;
+  pinnedBy: PinnedUser[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /** ===============================
@@ -55,33 +61,50 @@ const Chat: React.FC = () => {
   const { selectedUser } = useContext(SelectedUserContext)!;
 
   /** ===============================
-   * INITIAL DATA FETCH
+   * FETCH USERS
+   =============================== */
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get("/chat/users");
+
+      const users = res.data.users || [];
+      const pinnedUsers = res.data.pinnedUsers || [];
+
+      const formattedUsers = users.map((u: any) => ({
+        ...u,
+        pinned: pinnedUsers.includes(u._id), // ✅ correct check
+        unreadCount: u.unreadCount || 0,
+      }));
+
+      setAllUsers(formattedUsers);
+    } catch (error) {
+      console.log("Fetch users error:", error);
+    }
+  };
+
+  /** ===============================
+   * FETCH GROUPS
+   =============================== */ 
+
+  const fetchGroups = async () => {
+    try {
+      const res = await api.get("/group");
+
+      setAllGroups(res.data || []);
+    } catch (error) {
+      console.log("Fetch groups error:", error);
+    }
+  };
+
+  /** ===============================
+   * INITIAL LOAD
    =============================== */
 
   useEffect(() => {
     fetchUsers();
     fetchGroups();
   }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get("/chat/users");
-
-      setAllUsers(res.data.users);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const fetchGroups = async () => {
-    try {
-      const res = await api.get("/group");
-
-      setAllGroups(res.data);
-    } catch (error) {
-      console.log(error);
-    }
-  };
 
   /** ===============================
    * SOCKET CONNECTION
@@ -104,7 +127,7 @@ const Chat: React.FC = () => {
   }, [user]);
 
   /** ===============================
-   * ONLINE USERS LISTENER
+   * ONLINE / OFFLINE HANDLING
    =============================== */
 
   useEffect(() => {
@@ -112,27 +135,53 @@ const Chat: React.FC = () => {
       setOnlineUsers(users);
     });
 
+    socket.on("user_online", (userId: string) => {
+      setOnlineUsers((prev) =>
+        prev.includes(userId) ? prev : [...prev, userId],
+      );
+    });
+
+    socket.on("user_offline", (userId: string) => {
+      setOnlineUsers((prev) => prev.filter((id) => id !== userId));
+    });
+
+    return () => {
+      socket.off("online_users");
+      socket.off("user_online");
+      socket.off("user_offline");
+    };
+  }, []);
+
+  /** ===============================
+   * PROFILE CHANGE
+   =============================== */
+
+  useEffect(() => {
     const handleProfileChange = (data: any) => {
       setAllUsers((prev) =>
-        prev.map((user) =>
-          user._id === data.user._id
-            ? { ...user, profileImage: data.user.profileImage }
-            : user,
+        prev.map((u) =>
+          u._id === data.user._id
+            ? { ...u, profileImage: data.user.profileImage }
+            : u,
         ),
       );
     };
 
-    const handleGroupChange = (data: any) => {
+    socket.on("profile_change", handleProfileChange);
+
+    return () => {
+      socket.off("profile_change", handleProfileChange);
+    };
+  }, []);
+
+  /** ===============================
+   * GROUP PIN UPDATE
+   =============================== */
+
+  useEffect(() => {
+    const handleGroupPin = (data: any) => {
       setAllGroups((prev) =>
         prev.map((group) =>
-          group._id === data.group._id ? data.group : group,
-        ),
-      );
-    };
-
-    const handlePinUpdate = (data: any) => {
-      setAllGroups((prevGroups) =>
-        prevGroups.map((group) =>
           group._id === data.groupId
             ? { ...group, pinnedBy: data.pinnedBy }
             : group,
@@ -140,46 +189,37 @@ const Chat: React.FC = () => {
       );
     };
 
-    socket.on("group_pin_updated", handlePinUpdate);
-
-    socket.on("profile_change", handleProfileChange);
-    socket.on("group_profile_change", handleGroupChange);
+    socket.on("group_pin_updated", handleGroupPin);
 
     return () => {
-      socket.off("online_users");
-      socket.off("profile_change", handleProfileChange);
-      socket.off("group_pin_updated", handlePinUpdate);
+      socket.off("group_pin_updated", handleGroupPin);
     };
   }, []);
 
   /** ===============================
-   * RECEIVE PRIVATE MESSAGE
-   * Handles:
-   * - last message update
-   * - unread count
+   * RECEIVE MESSAGE
    =============================== */
 
   useEffect(() => {
-    socket.on("receive_message", (message) => {
-      setAllUsers((prevUsers) =>
-        prevUsers.map((u) => {
-          // if message belongs to this user
-          if (u._id === message.sender._id) {
-            const isOpen = selectedUser?._id === message.sender._id;
+    socket.on("receive_message", (message: any) => {
+      const senderId = message.sender._id;
 
-            return {
-              ...u,
+      setAllUsers((prev) =>
+        prev.map((u) => {
+          if (u._id !== senderId) return u;
 
-              lastMessage: {
-                _id: message._id,
-                message: message.message,
-              },
+          const isOpen = selectedUser?._id === senderId;
 
-              unreadCount: isOpen ? 0 : u.unreadCount + 1,
-            };
-          }
+          return {
+            ...u,
 
-          return u;
+            lastMessage: {
+              _id: message._id,
+              message: message.message || message.fileName || "File",
+            },
+
+            unreadCount: isOpen ? 0 : u.unreadCount + 1,
+          };
         }),
       );
     });
@@ -190,21 +230,13 @@ const Chat: React.FC = () => {
   }, [selectedUser]);
 
   /** ===============================
-   * MESSAGE SEEN EVENT FROM SERVER
-   * reset unread when backend confirms seen
+   * MESSAGE SEEN EVENT
    =============================== */
 
   useEffect(() => {
     socket.on("messages_seen", ({ seenBy }) => {
-      setAllUsers((prevUsers) =>
-        prevUsers.map((u) =>
-          u._id === seenBy
-            ? {
-                ...u,
-                unreadCount: 0,
-              }
-            : u,
-        ),
+      setAllUsers((prev) =>
+        prev.map((u) => (u._id === seenBy ? { ...u, unreadCount: 0 } : u)),
       );
     });
 
@@ -214,50 +246,34 @@ const Chat: React.FC = () => {
   }, []);
 
   /** ===============================
-   * RESET UNREAD WHEN CHAT OPENED
+   * MARK SEEN WHEN OPEN CHAT
    =============================== */
 
   useEffect(() => {
     if (!selectedUser) return;
 
-    // reset UI instantly
-    setAllUsers((prevUsers) =>
-      prevUsers.map((u) =>
-        u._id === selectedUser._id
-          ? {
-              ...u,
-              unreadCount: 0,
-            }
-          : u,
+    setAllUsers((prev) =>
+      prev.map((u) =>
+        u._id === selectedUser._id ? { ...u, unreadCount: 0 } : u,
       ),
     );
 
-    // notify backend
     socket.emit("mark_seen", {
       senderId: selectedUser._id,
     });
   }, [selectedUser]);
 
   /** ===============================
-   * MANUAL UNREAD RESET (ICON CLICK)
+   * MANUAL UNREAD RESET
    =============================== */
 
   const handleUnread = (e: React.MouseEvent, userId: string) => {
     e.stopPropagation();
 
-    // reset UI immediately
-    setAllUsers((prevUsers) =>
-      prevUsers.map((u) =>
-        u._id === userId
-          ? {
-              ...u,
-              unreadCount: 0,
-            }
-          : u,
-      ),
+    setAllUsers((prev) =>
+      prev.map((u) => (u._id === userId ? { ...u, unreadCount: 0 } : u)),
     );
 
-    // notify backend
     socket.emit("mark_seen", {
       senderId: userId,
     });
@@ -275,6 +291,7 @@ const Chat: React.FC = () => {
         onlineUsers={onlineUsers}
         handleUnread={handleUnread}
         setAllGroups={setAllGroups}
+        setAllUsers={setAllUsers}
       />
 
       <Outlet />

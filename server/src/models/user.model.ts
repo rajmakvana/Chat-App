@@ -20,6 +20,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: "",
     },
+    pinnedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

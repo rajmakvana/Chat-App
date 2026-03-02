@@ -5,6 +5,7 @@ export interface User {
     userName: string;
     userEmail: string;
     profileImage?: string;
+    pinnedUsers : string[]
 }
 
 export interface LoginCredential {

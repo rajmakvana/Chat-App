@@ -54,7 +54,9 @@ export const getGroupMessage = async (req: Request, res: Response) => {
 
   try {
     const messages = await GroupMessage.find({ groupId })
-      .populate("sender", "name email").populate("seenBy", "name").populate("replyTo")
+      .populate("sender", "name email")
+      .populate("seenBy", "name")
+      .populate("replyTo")
       .sort({ createdAt: 1 });
     res.status(201).json(messages);
   } catch (error) {
@@ -64,7 +66,7 @@ export const getGroupMessage = async (req: Request, res: Response) => {
 
 export const uploadGroupImage = async (req: Request, res: Response) => {
   try {
-    const {groupId} = req.params;
+    const { groupId } = req.params;
     console.log(groupId);
 
     if (!req.file) {
@@ -89,11 +91,11 @@ export const uploadGroupImage = async (req: Request, res: Response) => {
       });
     }
 
-    io.emit("group_profile_change" , {group});
+    io.emit("group_profile_change", { group });
 
     res.status(200).json({
       message: "Profile image uploaded",
-      group
+      group,
     });
   } catch (error) {
     res.status(500).json({
@@ -102,7 +104,6 @@ export const uploadGroupImage = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const togglePinGroup = async (req: Request, res: Response) => {
   try {
@@ -123,10 +124,11 @@ export const togglePinGroup = async (req: Request, res: Response) => {
 
     if (isPinned) {
       group.pinnedBy = group.pinnedBy?.filter(
-        (id) => id.toString() !== userId.toString()
+        (id) => id.toString() !== userId.toString(),
       );
     } else {
       group.pinnedBy?.push(userId);
+      group.updatedAt = new Date();
     }
 
     await group.save();
