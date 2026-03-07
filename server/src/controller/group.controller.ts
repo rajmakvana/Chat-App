@@ -120,14 +120,16 @@ export const togglePinGroup = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Group not found" });
     }
 
-    const isPinned = group.pinnedBy?.includes(userId);
+    const isPinned = group.pinnedBy?.some(
+      (pin) => pin.userId.toString() === userId.toString(),
+    );
 
     if (isPinned) {
       group.pinnedBy = group.pinnedBy?.filter(
-        (id) => id.toString() !== userId.toString(),
+        (pin) => pin.userId.toString() !== userId.toString(),
       );
     } else {
-      group.pinnedBy?.push(userId);
+      group.pinnedBy?.push({ userId, pinnedAt: new Date() });
       group.updatedAt = new Date();
     }
 
